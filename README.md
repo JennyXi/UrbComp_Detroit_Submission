@@ -6,6 +6,25 @@ CSCI-SHU 205 Topics in Computer Science · Urban Computing Final Project (Spring
 
 ## 中文说明（Chinese）
 
+### 仓库地图（2026）
+
+端到端关系（**人数侧预测** + **POI 对齐**）：
+
+| 阶段 | 做什么 | 主要目录 / 脚本 |
+|------|--------|-------------------|
+| **原始 → Detroit → 空间聚合** | DuckDB 过滤、CBG/100m 周或日汇总 | `scripts/filter_detroit_duckdb.py`，`scripts/aggregate_grid_weekly.py`，`scripts/aggregate_grid_daily.py` → `data/*.parquet`（大文件多未入库） |
+| **Weekly crowd（共享 Panel）** | Top-K 格、周频、`freq=w`，共享 Autoformer | `panel_training_0426/build_panel_weekly_dataset.py` → `train_panel_autoformer.py` → `export_panel_predictions.py` |
+| **Weekly crowd（按格 baseline）** | Top-100、每格单独训练 | `use_official_autoformer_grid/` |
+| **Daily crowd（共享 Panel）** | Top-K 格、日频、`freq=d` | `daily_training_0430/`（内含完整 `train_panel_autoformer.py`、`export_panel_predictions.py`、`build_panel_daily_dataset.py`、`evaluate_panel_predictions.py` 副本；启动器见 `*_daily_ratio.py`） |
+| **Weekly POI alignment** | Ridge：`c_bar` vs POI→`c_hat`，`r_alignment` | **`weekly_alignment/`**（Jul–Sep 2025 冻结：`compute_alignment.py`、`summarize_alignment.py`、CSV/GPKG）；同源脚本亦在 `POI_Alignment_0429/` |
+| **Daily 人流 × Weekly POI 制图** | 日预测在窗内取均值，连接冻结对齐表 | `daily_training_0430/export_daily_crowd_with_weekly_poi_alignment.py` → 综合 CSV/GPKG |
+
+**Top-100 / Top-K 选取**：在 `build_panel_weekly_dataset.py` / `build_panel_daily_dataset.py` 中，默认按指定 **`--topk-year`**（常为 **2024**）全日历年内 **总 visits** 降序取前 K 格，减少「用目标年挑格」的信息泄漏。
+
+**课程提交副本**：公开仓库 **https://github.com/JennyXi/UrbComp_Detroit_Submission**（与本地 `git remote submission` 对应）；主线材料同步在 `weekly_alignment/`、`daily_training_0430/` 等。
+
+---
+
 ### 当前工作流、操作方法与目标效果
 
 #### Weekly 封版状态（2026-04-29）
@@ -36,6 +55,10 @@ CSCI-SHU 205 Topics in Computer Science · Urban Computing Final Project (Spring
 6. **POI 对齐（已接入）**：`POI_Alignment_0429/compute_alignment.py` 以多周平均预测 crowd（`c_bar`）对 POI-only 期望 crowd（`c_hat`）做残差 `r_alignment=c_bar-c_hat`；`summarize_alignment.py` 输出 Top 错配、优先补建类别（`priority_q_1/2`）及可行动分层（`tier1_actionable/tier2_watchlist`）。
 
 （若做 **按格单独 Autoformer** 基线，则走 `use_official_autoformer_grid/`，与 Panel 并行对比。）
+
+**Daily 人流（日频 Panel）**：用 `data/grid100_daily_*.parquet`（由 `scripts/aggregate_grid_daily.py` 等生成）经 `build_panel_daily_dataset.py` 得到日 panel，再 `daily_training_0430/train_panel_autoformer_daily_ratio.py` 训练、`export_panel_predictions_daily_ratio.py` 导出。详见 **`daily_training_0430/README.md`**。
+
+**POI 对齐（报告主窗 Jul–Sep 2025）**：冻结结果在 **`weekly_alignment/`**（如 `alignment_jul_sep_2025.csv`、GPKG）。与 **日频预测** 的联合制图见 **`daily_training_0430/export_daily_crowd_with_weekly_poi_alignment.py`**（人群用日模在窗内均值，POI 侧用已冻结的 weekly 对齐表）。
 
 #### 操作方法（最小可复现顺序）
 
@@ -69,6 +92,8 @@ CSCI-SHU 205 Topics in Computer Science · Urban Computing Final Project (Spring
 | **城市级周序列** | 1 行 = 1 周，`h_0..h_167` 等通道 | `data/autoformer_weekly_preprocessed.csv` |
 | **城市级小时序列** | 1 行 = 1 小时 | `data/autoformer_hourly_preprocessed.csv` |
 | **空间聚合** | CBG / 100m 网格周汇总 | `scripts/aggregate_*` → `data/*.parquet` |
+| **Daily 训练 + 与 POI 合并** | 日频共享模型、导出、评估与联合 GPKG | `daily_training_0430/` |
+| **POI 对齐（Jul–Sep 等）** | Ridge 错配 + 规划候选 + QGIS | `weekly_alignment/`，`scripts/export_alignment_gpkg.py`（或 `weekly_alignment/export_alignment_gpkg.py`） |
 
 所有供 Autoformer 使用的 CSV 均遵循常见 **`Dataset_Custom`** 约定：第一列 `date`，最后一列 **`OT`**（预测目标），中间列为数值协变量。
 
@@ -158,6 +183,25 @@ python scripts/visualize_grid_osm.py --input data/grid100_weekly_2024_2025.parqu
 
 ## English
 
+### Repository map (2026)
+
+End-to-end **crowd prediction** + **POI alignment**:
+
+| Stage | What | Where |
+|-------|------|--------|
+| **Raw → Detroit → spatial aggregate** | DuckDB filter, CBG / 100m weekly or daily rollup | `scripts/filter_detroit_duckdb.py`, `aggregate_grid_weekly.py`, `aggregate_grid_daily.py` → `data/*.parquet` (large blobs often not in git) |
+| **Weekly crowd (shared panel)** | Top-K grids, weekly `freq=w`, shared Autoformer | `panel_training_0426/build_panel_weekly_dataset.py` → `train_panel_autoformer.py` → `export_panel_predictions.py` |
+| **Weekly crowd (per-grid baseline)** | Top-100, one model per grid | `use_official_autoformer_grid/` |
+| **Daily crowd (shared panel)** | Top-K grids, daily `freq=d` | `daily_training_0430/` (includes copies of core trainers/exporters + launchers `*_daily_ratio.py`; see that folder’s README) |
+| **Weekly POI alignment** | Ridge residual `r_alignment` vs POI-only fit | **`weekly_alignment/`** (frozen Jul–Sep 2025 artifacts); same algorithms under `POI_Alignment_0429/` |
+| **Daily predictions × weekly POI layers** | Mean daily preds in window joined to frozen alignment | `daily_training_0430/export_daily_crowd_with_weekly_poi_alignment.py` |
+
+**Top-K selection**: `build_panel_*_dataset.py` ranks grids by total visits in **`--topk-year`** (often **2024**) and keeps top-K to reduce target-year leakage.
+
+**Course submission mirror**: **https://github.com/JennyXi/UrbComp_Detroit_Submission** (remote `submission`).
+
+---
+
 ### Current workflow, how-to, and intended outcomes
 
 #### Weekly freeze status (2026-04-29)
@@ -188,6 +232,10 @@ python scripts/visualize_grid_osm.py --input data/grid100_weekly_2024_2025.parqu
 6. **POI alignment (integrated)**: `POI_Alignment_0429/compute_alignment.py` fits POI-only expected crowd (`c_hat`) against multi-week mean predicted crowd (`c_bar`) and computes `r_alignment=c_bar-c_hat`; `summarize_alignment.py` exports top mismatch grids, recommended POI type (`priority_q_1/2`), and action tiers (`tier1_actionable/tier2_watchlist`).
 
 (For a **one-model-per-grid** baseline, use `use_official_autoformer_grid/` in parallel.)
+
+**Daily crowd (panel, `freq=d`)**: build daily panel from `data/grid100_daily_*.parquet` via `build_panel_daily_dataset.py`, then train/export via **`daily_training_0430/README.md`** (`train_panel_autoformer_daily_ratio.py`, `export_panel_predictions_daily_ratio.py`). Still pass **`--autoformer-root`** to the underlying trainer as documented.
+
+**POI alignment for reporting (Jul–Sep 2025)**: frozen CSV/GPKG under **`weekly_alignment/`**. To map **daily** model outputs with **weekly** alignment attributes, run **`daily_training_0430/export_daily_crowd_with_weekly_poi_alignment.py`**.
 
 #### How to run (minimal reproducible order)
 
@@ -221,6 +269,8 @@ This repository prepares **Detroit crowd-flow (visit)** time-series data from De
 | **City-level weekly series** | 1 row = 1 week, channels incl. `h_0..h_167` | `data/autoformer_weekly_preprocessed.csv` |
 | **City-level hourly series** | 1 row = 1 hour | `data/autoformer_hourly_preprocessed.csv` |
 | **Spatial aggregation** | CBG / 100m grid weekly totals | `scripts/aggregate_*` → `data/*.parquet` |
+| **Daily training + POI merge** | Daily panel train/export/eval + combined GPKG | `daily_training_0430/` |
+| **POI alignment (Jul–Sep, etc.)** | Ridge mismatch + QGIS | `weekly_alignment/`, `export_alignment_gpkg.py` |
 
 Autoformer-ready CSVs follow the usual **`Dataset_Custom`** layout: first column `date`, last column **`OT`**, numeric covariates in between.
 
@@ -308,3 +358,4 @@ Large generated files are git-ignored by design.
 
 - **English**: Weekly city-level CSV encodes within-week shape as `h_0..h_167`; hourly CSV uses real timestamps. Panel training consumes **grid-weekly** Parquet + panel CSV, not the city-level `autoformer_weekly_preprocessed.csv` unless you adapt the pipeline.  
 - **中文**：城市级周数据用 `h_0..h_167` 编码周内形状；小时数据用真实时间戳。Panel 训练使用的是 **网格周 Parquet → panel CSV**，与城市级 `autoformer_weekly_preprocessed.csv` 是不同一条线，除非自行改接。
+- **Daily × POI maps**：`daily_training_0430/export_daily_crowd_with_weekly_poi_alignment.py` 将 **日模型预测** 在观测窗内按格取均值，并与 **weekly_alignment** 中已算好的 Ridge / POI 字段合并；**并非**在日线上单独重跑一整套 Ridge（若需要日线对齐需另建 `compute_alignment_daily` 一类流程）。

@@ -64,3 +64,9 @@ Python 3 with `pandas`, `numpy`, `pyarrow`, `scikit-learn`, and for GPKG export 
 ## Relation to `POI_Alignment_0429/`
 
 The same algorithms exist under `POI_Alignment_0429/` for other date windows. This folder is the **curated Jul–Sep weekly bundle** for submission and reporting.
+
+## GitHub (submission repo)
+
+This bundle was pushed to the **`submission`** remote as branch **`weekly_alignment_jul_sep_2025`** (the remote `main` had diverged and could not be fast-forwarded). Open a PR to merge that branch into `main`, or merge locally after reconciling histories:
+
+https://github.com/JennyXi/UrbComp_Detroit_Submission/pull/new/weekly_alignment_jul_sep_2025

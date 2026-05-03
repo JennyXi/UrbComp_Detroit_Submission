@@ -14,8 +14,11 @@ import subprocess
 
 
 def main() -> None:
-    repo_root = Path(__file__).resolve().parents[1]
-    export_py = (repo_root / "panel_training_0426" / "export_panel_predictions.py").resolve()
+    here = Path(__file__).resolve().parent
+    repo_root = here.parent
+    export_py = (here / "export_panel_predictions.py").resolve()
+    if not export_py.exists():
+        export_py = (repo_root / "panel_training_0426" / "export_panel_predictions.py").resolve()
     if not export_py.exists():
         raise SystemExit(f"Missing export entrypoint: {export_py}")
 

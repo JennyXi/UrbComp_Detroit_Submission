@@ -2,12 +2,27 @@
 
 This folder is a snapshot of the **daily panel Autoformer** baseline drafted on **2026-04-30**.
 
-### Training / export entrypoints (copied here for submission)
+### Daily training code layout
 
-These thin wrappers call `panel_training_0426/train_panel_autoformer.py` and `export_panel_predictions.py` with daily defaults; checkpoints are written under `daily_training_0430/checkpoints/` when you train locally:
+**Thin launchers** (defaults for year-split daily panel):
 
-- `train_panel_autoformer_daily_ratio.py`
-- `export_panel_predictions_daily_ratio.py`
+- `train_panel_autoformer_daily_ratio.py` — calls `train_panel_autoformer.py` (below or under `panel_training_0426/`).
+- `export_panel_predictions_daily_ratio.py` — calls `export_panel_predictions.py`.
+
+**Full implementations copied into this folder** (so `daily_training_0430/` alone holds the training/export/build/eval stack relative to repo root):
+
+| File | Role |
+|------|------|
+| `train_panel_autoformer.py` | Shared Autoformer panel trainer (`freq=d` from launcher). |
+| `export_panel_predictions.py` | Exports test predictions to long/by-date CSVs. |
+| `build_panel_daily_dataset.py` | Builds Top-K **daily** panel CSV from `data/grid100_daily_*.parquet`. |
+| `evaluate_panel_predictions.py` | Metrics from exported preds → `eval_daily_yearsplit/` style outputs. |
+
+Upstream data prep still uses repo-level `scripts/` (e.g. `aggregate_grid_daily.py`) and `data/` parquet paths referenced by `build_panel_daily_dataset.py`.
+
+### Merge with weekly POI alignment
+
+- `export_daily_crowd_with_weekly_poi_alignment.py` — joins daily preds + `weekly_alignment/alignment_jul_sep_2025.csv`; writes combined CSV/GPKG.
 
 ### What was trained
 
@@ -22,18 +37,30 @@ These thin wrappers call `panel_training_0426/train_panel_autoformer.py` and `ex
 
 ### How to reproduce (CMD)
 
+Build daily panel (needs `data/grid100_daily_*.parquet` from `scripts/aggregate_grid_daily.py`):
+
+```cmd
+cd /d "E:\Urban Computing Final Project\Try_0412"
+python daily_training_0430\build_panel_daily_dataset.py
+```
+
 Train:
 
 ```cmd
 cd /d "E:\Urban Computing Final Project\Try_0412"
-".\.venv\Scripts\python.exe" -u ".\panel_training_0426\train_panel_autoformer_daily_ratio.py" --autoformer-root "E:\Urban Computing Final Project\autoformer_spatial_0425\Autoformer"
+python daily_training_0430\train_panel_autoformer_daily_ratio.py
 ```
 
-Export predictions (if export script runs on your machine):
+Export predictions:
 
 ```cmd
-cd /d "E:\Urban Computing Final Project\Try_0412"
-".\.venv\Scripts\python.exe" -u ".\panel_training_0426\export_panel_predictions_daily_ratio.py" --autoformer-root "E:\Urban Computing Final Project\autoformer_spatial_0425\Autoformer"
+python daily_training_0430\export_panel_predictions_daily_ratio.py
+```
+
+Evaluate (optional):
+
+```cmd
+python daily_training_0430\evaluate_panel_predictions.py --pred-csv daily_training_0430/panel_pred_test_2025_long.csv --out-dir daily_training_0430/eval --top-k 15
 ```
 
 ### Daily crowd + weekly POI alignment (Jul–Sep 2025) — CSV + GPKG

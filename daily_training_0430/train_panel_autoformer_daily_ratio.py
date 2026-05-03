@@ -21,8 +21,12 @@ import subprocess
 
 
 def main() -> None:
-    repo_root = Path(__file__).resolve().parents[1]
-    train_py = (repo_root / "panel_training_0426" / "train_panel_autoformer.py").resolve()
+    here = Path(__file__).resolve().parent
+    repo_root = here.parent
+    # Prefer a copy in this folder (submission bundle); fall back to panel_training_0426.
+    train_py = (here / "train_panel_autoformer.py").resolve()
+    if not train_py.exists():
+        train_py = (repo_root / "panel_training_0426" / "train_panel_autoformer.py").resolve()
     if not train_py.exists():
         raise SystemExit(f"Missing training entrypoint: {train_py}")
 

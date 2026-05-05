@@ -1,0 +1,5 @@
+# Local artifacts we don't want to commit
+checkpoints_*/
+**/checkpoints_*/
+*.pth
+

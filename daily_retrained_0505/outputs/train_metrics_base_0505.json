@@ -1,0 +1,15 @@
+{
+  "setting": "panel_Autoformer_ftMS_sl84_ll42_pl14_dm192_el2_dl1_ma7_log1p_huber1_pgs_crop_2025_04_08_to_2025_10_31",
+  "best_val_loss": 0.000517250146933495,
+  "best_epoch": 39,
+  "epochs_run": 40,
+  "checkpoint": "E:\\Urban Computing Final Project\\Try_0412\\daily_retrained_0505\\checkpoints\\panel_Autoformer_ftMS_sl84_ll42_pl14_dm192_el2_dl1_ma7_log1p_huber1_pgs_crop_2025_04_08_to_2025_10_31\\checkpoint.pth",
+  "panel_csv": "E:\\Urban Computing Final Project\\Try_0412\\panel_training_0426\\outputs\\panel_daily_top100_2024_2025_topk2024_city_lag1_wk_is_weekend_sp_nbr8_std_lag1_log1p.csv",
+  "lr": 5e-05,
+  "d_model": 192,
+  "d_ff": 768,
+  "dropout": 0.08,
+  "weight_decay": 0.0001,
+  "loss": "huber",
+  "huber_delta": 1.0
+}

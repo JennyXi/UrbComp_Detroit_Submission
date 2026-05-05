@@ -233,6 +233,16 @@ def main() -> None:
     parser.add_argument("--freq", default="w")
     parser.add_argument("--target-transform", default="log1p", choices=["none", "log1p"])
     parser.add_argument(
+        "--data-start",
+        default=None,
+        help="Optional inclusive start date (YYYY-MM-DD) to crop the panel timeline before splitting.",
+    )
+    parser.add_argument(
+        "--data-end",
+        default=None,
+        help="Optional inclusive end date (YYYY-MM-DD) to crop the panel timeline before splitting.",
+    )
+    parser.add_argument(
         "--split-mode",
         default="year",
         choices=["ratio", "year"],
@@ -319,6 +329,17 @@ def main() -> None:
     miss = need - set(df.columns)
     if miss:
         raise SystemExit(f"Panel CSV missing columns: {sorted(miss)}")
+
+    if args.data_start or args.data_end:
+        start = pd.Timestamp(args.data_start).normalize() if args.data_start else None
+        end = pd.Timestamp(args.data_end).normalize() if args.data_end else None
+        dnorm = pd.to_datetime(df["date"]).dt.normalize()
+        if start is not None:
+            df = df.loc[dnorm >= start]
+        if end is not None:
+            df = df.loc[dnorm <= end]
+        if len(df) == 0:
+            raise SystemExit(f"After --data-start/--data-end filtering, panel is empty.")
 
     df["grid_id"] = df["grid_id"].astype(str)
     grid_ids = sorted(df["grid_id"].unique().tolist())
@@ -466,10 +487,20 @@ def main() -> None:
     bad = 0
     ckpt_dir = (repo_root / args.checkpoints_dir).resolve()
     ckpt_dir.mkdir(parents=True, exist_ok=True)
+
+    crop_suffix = ""
+    if args.data_start or args.data_end:
+        ds = str(args.data_start).strip() if args.data_start else ""
+        de = str(args.data_end).strip() if args.data_end else ""
+        # Make folder name filesystem-friendly.
+        ds = ds.replace("-", "_")
+        de = de.replace("-", "_")
+        crop_suffix = f"_crop_{ds}_to_{de}"
+
     setting = (
         f"panel_Autoformer_ftMS_sl{cfg.seq_len}_ll{cfg.label_len}_pl{cfg.pred_len}_"
         f"dm{int(args.d_model)}_el{int(args.e_layers)}_dl{int(args.d_layers)}_ma{int(args.moving_avg)}_"
-        f"{cfg.target_transform}{huber_suffix}_pgs"
+        f"{cfg.target_transform}{huber_suffix}_pgs{crop_suffix}"
     )
     out_path = ckpt_dir / setting
     out_path.mkdir(parents=True, exist_ok=True)

@@ -68,6 +68,26 @@ def main() -> None:
     parser.add_argument("--out-dir", default="panel_training_0426/outputs")
     parser.add_argument("--scope", default="test", choices=["train", "val", "test", "all"])
     parser.add_argument("--target-year", type=int, default=2025)
+    parser.add_argument(
+        "--target-start",
+        default=None,
+        help="Optional inclusive start date (YYYY-MM-DD) for filtering exported prediction rows.",
+    )
+    parser.add_argument(
+        "--target-end",
+        default=None,
+        help="Optional inclusive end date (YYYY-MM-DD) for filtering exported prediction rows.",
+    )
+    parser.add_argument(
+        "--data-start",
+        default=None,
+        help="Optional inclusive start date (YYYY-MM-DD) to crop the panel timeline before splitting.",
+    )
+    parser.add_argument(
+        "--data-end",
+        default=None,
+        help="Optional inclusive end date (YYYY-MM-DD) to crop the panel timeline before splitting.",
+    )
     parser.add_argument("--seq-len", type=int, default=24)
     parser.add_argument("--label-len", type=int, default=12)
     parser.add_argument("--pred-len", type=int, default=4)
@@ -138,6 +158,18 @@ def main() -> None:
     from utils.timefeatures import time_features  # type: ignore
 
     df = pd.read_csv(panel_path, parse_dates=["date"])
+
+    if args.data_start or args.data_end:
+        start = pd.Timestamp(args.data_start).normalize() if args.data_start else None
+        end = pd.Timestamp(args.data_end).normalize() if args.data_end else None
+        dnorm = pd.to_datetime(df["date"]).dt.normalize()
+        if start is not None:
+            df = df.loc[dnorm >= start]
+        if end is not None:
+            df = df.loc[dnorm <= end]
+        if len(df) == 0:
+            raise SystemExit("After --data-start/--data-end filtering, panel is empty.")
+
     df["grid_id"] = df["grid_id"].astype(str)
     cov_cols = [c for c in df.columns if c not in {"grid_id", "date", "OT"}]
     cols_data = cov_cols + ["OT"]
@@ -276,10 +308,18 @@ def main() -> None:
 
                 dates = g["date"].iloc[g0 + args.seq_len : g0 + args.seq_len + args.pred_len].to_list()
                 for h in range(args.pred_len):
-                    dt = pd.Timestamp(dates[h])
+                    dt = pd.Timestamp(dates[h]).normalize()
                     if args.target_year is not None:
                         y = int(args.target_year)
                         if not (pd.Timestamp(f"{y}-01-01") <= dt <= pd.Timestamp(f"{y}-12-31")):
+                            continue
+                    if args.target_start is not None:
+                        ts = pd.Timestamp(args.target_start).normalize()
+                        if dt < ts:
+                            continue
+                    if args.target_end is not None:
+                        te = pd.Timestamp(args.target_end).normalize()
+                        if dt > te:
                             continue
                     rows.append(
                         {

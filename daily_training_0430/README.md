@@ -20,6 +20,19 @@ This folder is a snapshot of the **daily panel Autoformer** baseline drafted on 
 
 Upstream data prep still uses repo-level `scripts/` (e.g. `aggregate_grid_daily.py`) and `data/` parquet paths referenced by `build_panel_daily_dataset.py`.
 
+### Important: Dewey weekly → true daily
+
+If your raw POI parquet is **weekly** (one row per POI per week) but contains `VISITS_BY_DAY`,
+do **not** build `grid100_daily_*.parquet` using only `VISIT_COUNTS` at `DATE_RANGE_START`
+— that will collapse a week's mass onto one day and create 6 days of zeros after panel reindexing.
+
+Use this repo's expander instead:
+
+```cmd
+cd /d "E:\Urban Computing Final Project\Try_0412"
+python scripts\aggregate_grid_daily_from_visits_by_day.py --output data\grid100_daily_2024_2025_from_byday.parquet
+```
+
 ### Merge with weekly POI alignment
 
 - `export_daily_crowd_with_weekly_poi_alignment.py` — joins daily preds + `weekly_alignment/alignment_jul_sep_2025.csv`; writes combined CSV/GPKG.

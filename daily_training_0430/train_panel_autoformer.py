@@ -42,12 +42,17 @@ class PanelWindows(Dataset):
         train_end: str = "2024-12-31",
         test_start: str = "2025-01-01",
         val_weeks: int = 10,
+        # date split (explicit target-date ranges; inclusive)
+        train_start: str = "2024-01-01",
+        val_start: str = "2024-10-01",
+        val_end: str = "2024-12-31",
+        test_end: str = "2025-12-31",
         train_ratio: float = 0.7,
         val_ratio: float = 0.15,
         test_ratio: float = 0.15,
     ):
         assert split in {"train", "val", "test"}
-        assert split_mode in {"ratio", "year"}
+        assert split_mode in {"ratio", "year", "date"}
         self.cfg = cfg
         self.split = split
         self.grid_ids = grid_ids
@@ -105,6 +110,40 @@ class PanelWindows(Dataset):
                         train_g0s.append(g0)
             return train_g0s, val_g0s, test_g0s
 
+        def _g0s_date_split(dates: pd.Series) -> tuple[list[int], list[int], list[int]]:
+            d = pd.to_datetime(dates).reset_index(drop=True)
+            n = len(d)
+            max_g0 = n - cfg.seq_len - cfg.pred_len
+            if max_g0 < 0:
+                return [], [], []
+
+            tr0 = pd.Timestamp(train_start).normalize()
+            tr1 = pd.Timestamp(train_end).normalize()
+            va0 = pd.Timestamp(val_start).normalize()
+            va1 = pd.Timestamp(val_end).normalize()
+            te0 = pd.Timestamp(test_start).normalize()
+            te1 = pd.Timestamp(test_end).normalize()
+
+            train_g0s: list[int] = []
+            val_g0s: list[int] = []
+            test_g0s: list[int] = []
+            for g0 in range(0, max_g0 + 1):
+                t = _targets_for_g0(d, g0)
+                if t.empty:
+                    continue
+                t0 = pd.Timestamp(t.min()).normalize()
+                t1 = pd.Timestamp(t.max()).normalize()
+
+                if (t0 >= te0) and (t1 <= te1):
+                    test_g0s.append(g0)
+                    continue
+                if (t0 >= va0) and (t1 <= va1):
+                    val_g0s.append(g0)
+                    continue
+                if (t0 >= tr0) and (t1 <= tr1):
+                    train_g0s.append(g0)
+            return train_g0s, val_g0s, test_g0s
+
         def _ratio_split_borders(n: int) -> tuple[list[int], list[int]]:
             num_train = int(round(n * float(train_ratio)))
             num_val = int(round(n * float(val_ratio)))
@@ -132,10 +171,17 @@ class PanelWindows(Dataset):
                     continue
                 for i in range(n_samples):
                     self.indices.append((gid, border1 + i))
-        else:
+        elif split_mode == "year":
             # Strict year split: train targets in 2024 (<= train_end), test targets in 2025 (>= test_start)
             for gid, g in self.series.items():
                 tr, va, te = _g0s_year_split(g["date"])
+                g0s = {"train": tr, "val": va, "test": te}[split]
+                for g0 in g0s:
+                    self.indices.append((gid, int(g0)))
+        else:
+            # Explicit date split: targets must be fully inside each inclusive range
+            for gid, g in self.series.items():
+                tr, va, te = _g0s_date_split(g["date"])
                 g0s = {"train": tr, "val": va, "test": te}[split]
                 for g0 in g0s:
                     self.indices.append((gid, int(g0)))
@@ -245,14 +291,18 @@ def main() -> None:
     parser.add_argument(
         "--split-mode",
         default="year",
-        choices=["ratio", "year"],
-        help="ratio: configurable train/val/test split per grid timeline. year: strict train<=train_end, test>=test_start.",
+        choices=["ratio", "year", "date"],
+        help="ratio: configurable train/val/test split per grid timeline. year: strict train<=train_end, test>=test_start. date: explicit target-date ranges.",
     )
     parser.add_argument("--train-ratio", type=float, default=0.7, help="Used when --split-mode ratio.")
     parser.add_argument("--val-ratio", type=float, default=0.15, help="Used when --split-mode ratio.")
     parser.add_argument("--test-ratio", type=float, default=0.15, help="Used when --split-mode ratio.")
     parser.add_argument("--train-end", default="2024-12-31", help="Used when --split-mode year.")
     parser.add_argument("--test-start", default="2025-01-01", help="Used when --split-mode year.")
+    parser.add_argument("--train-start", default="2024-01-01", help="Date split only: train targets start (inclusive).")
+    parser.add_argument("--val-start", default="2024-10-01", help="Date split only: val targets start (inclusive).")
+    parser.add_argument("--val-end", default="2024-12-31", help="Date split only: val targets end (inclusive).")
+    parser.add_argument("--test-end", default="2025-12-31", help="Date split only: test targets end (inclusive).")
     parser.add_argument(
         "--val-weeks",
         type=int,
@@ -367,9 +417,13 @@ def main() -> None:
         per_grid_scalers=None,
         time_features_fn=time_features,
         split_mode=sm,
+        train_start=str(args.train_start),
         train_end=str(args.train_end),
         test_start=str(args.test_start),
+        test_end=str(args.test_end),
         val_weeks=int(args.val_weeks),
+        val_start=str(args.val_start),
+        val_end=str(args.val_end),
         train_ratio=float(args.train_ratio),
         val_ratio=float(args.val_ratio),
         test_ratio=float(args.test_ratio),
@@ -383,9 +437,13 @@ def main() -> None:
         per_grid_scalers=per_grid_scalers,
         time_features_fn=time_features,
         split_mode=sm,
+        train_start=str(args.train_start),
         train_end=str(args.train_end),
         test_start=str(args.test_start),
+        test_end=str(args.test_end),
         val_weeks=int(args.val_weeks),
+        val_start=str(args.val_start),
+        val_end=str(args.val_end),
         train_ratio=float(args.train_ratio),
         val_ratio=float(args.val_ratio),
         test_ratio=float(args.test_ratio),
@@ -398,9 +456,13 @@ def main() -> None:
         per_grid_scalers=per_grid_scalers,
         time_features_fn=time_features,
         split_mode=sm,
+        train_start=str(args.train_start),
         train_end=str(args.train_end),
         test_start=str(args.test_start),
+        test_end=str(args.test_end),
         val_weeks=int(args.val_weeks),
+        val_start=str(args.val_start),
+        val_end=str(args.val_end),
         train_ratio=float(args.train_ratio),
         val_ratio=float(args.val_ratio),
         test_ratio=float(args.test_ratio),
@@ -412,6 +474,13 @@ def main() -> None:
             raise SystemExit("Year split produced no validation windows. Try smaller --val-weeks or smaller seq_len/pred_len.")
         if len(test_ds) == 0:
             raise SystemExit("Year split produced no test windows. Check panel date range and --test-start.")
+    if sm == "date":
+        if len(train_ds) == 0:
+            raise SystemExit("Date split produced no training windows. Check --train-start/--train-end and panel date range.")
+        if len(val_ds) == 0:
+            raise SystemExit("Date split produced no validation windows. Check --val-start/--val-end and seq_len/pred_len.")
+        if len(test_ds) == 0:
+            raise SystemExit("Date split produced no test windows. Check --test-start/--test-end and panel date range.")
 
     train_loader = DataLoader(train_ds, batch_size=cfg.batch_size, shuffle=True, num_workers=0, drop_last=True)
     val_loader = DataLoader(val_ds, batch_size=cfg.batch_size, shuffle=False, num_workers=0, drop_last=False)

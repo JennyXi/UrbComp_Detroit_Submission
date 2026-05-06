@@ -56,6 +56,53 @@ def _year_split_g0s(
     return train_g0s, val_g0s, test_g0s, scaler_fit_end_excl
 
 
+def _date_split_g0s(
+    dates: pd.Series,
+    seq_len: int,
+    pred_len: int,
+    *,
+    train_start: str,
+    train_end: str,
+    val_start: str,
+    val_end: str,
+    test_start: str,
+    test_end: str,
+) -> tuple[list[int], list[int], list[int], int]:
+    d = pd.to_datetime(dates).reset_index(drop=True)
+    n = len(d)
+    max_g0 = n - seq_len - pred_len
+    if max_g0 < 0:
+        return [], [], [], 0
+
+    tr0 = pd.Timestamp(train_start).normalize()
+    tr1 = pd.Timestamp(train_end).normalize()
+    va0 = pd.Timestamp(val_start).normalize()
+    va1 = pd.Timestamp(val_end).normalize()
+    te0 = pd.Timestamp(test_start).normalize()
+    te1 = pd.Timestamp(test_end).normalize()
+
+    train_g0s: list[int] = []
+    val_g0s: list[int] = []
+    test_g0s: list[int] = []
+    for g0 in range(0, max_g0 + 1):
+        t = pd.to_datetime(d.iloc[g0 + seq_len : g0 + seq_len + pred_len])
+        if t.empty:
+            continue
+        t0 = pd.Timestamp(t.min()).normalize()
+        t1 = pd.Timestamp(t.max()).normalize()
+        if (t0 >= te0) and (t1 <= te1):
+            test_g0s.append(g0)
+            continue
+        if (t0 >= va0) and (t1 <= va1):
+            val_g0s.append(g0)
+            continue
+        if (t0 >= tr0) and (t1 <= tr1):
+            train_g0s.append(g0)
+
+    scaler_fit_end_excl = int((d.dt.normalize() <= tr1).sum())
+    return train_g0s, val_g0s, test_g0s, scaler_fit_end_excl
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Export predictions from panel Autoformer checkpoint (per grid, aligned dates).")
     parser.add_argument(
@@ -96,8 +143,8 @@ def main() -> None:
     parser.add_argument(
         "--split-mode",
         default="year",
-        choices=["ratio", "year"],
-        help="Must match training. year: strict train<=train_end, test>=test_start.",
+        choices=["ratio", "year", "date"],
+        help="Must match training. year: strict train<=train_end, test>=test_start. date: explicit target-date ranges.",
     )
     parser.add_argument("--train-ratio", type=float, default=0.7, help="Used when --split-mode ratio.")
     parser.add_argument("--val-ratio", type=float, default=0.15, help="Used when --split-mode ratio.")
@@ -105,6 +152,10 @@ def main() -> None:
     parser.add_argument("--train-end", default="2024-12-31")
     parser.add_argument("--test-start", default="2025-01-01")
     parser.add_argument("--val-weeks", type=int, default=10)
+    parser.add_argument("--train-start", default="2024-01-01", help="Date split only: train targets start (inclusive).")
+    parser.add_argument("--val-start", default="2024-10-01", help="Date split only: val targets start (inclusive).")
+    parser.add_argument("--val-end", default="2024-12-31", help="Date split only: val targets end (inclusive).")
+    parser.add_argument("--test-end", default="2025-12-31", help="Date split only: test targets end (inclusive).")
     parser.add_argument("--d-model", type=int, default=128, help="Must match training checkpoint.")
     parser.add_argument("--n-heads", type=int, default=8, help="Must match training.")
     parser.add_argument("--e-layers", type=int, default=2, help="Must match training.")
@@ -193,9 +244,22 @@ def main() -> None:
                 float(args.test_ratio),
             )
             tr = g.loc[border1s[0] : border2s[0] - 1, cols_data]
-        else:
+        elif sm == "year":
             _tr, _va, _te, end_excl = _year_split_g0s(
                 g["date"], int(args.seq_len), int(args.pred_len), str(args.train_end), str(args.test_start), int(args.val_weeks)
+            )
+            tr = g.loc[: end_excl - 1, cols_data]
+        else:
+            _tr, _va, _te, end_excl = _date_split_g0s(
+                g["date"],
+                int(args.seq_len),
+                int(args.pred_len),
+                train_start=str(args.train_start),
+                train_end=str(args.train_end),
+                val_start=str(args.val_start),
+                val_end=str(args.val_end),
+                test_start=str(args.test_start),
+                test_end=str(args.test_end),
             )
             tr = g.loc[: end_excl - 1, cols_data]
         if len(tr) == 0:
@@ -265,9 +329,26 @@ def main() -> None:
                 if n_samples <= 0:
                     continue
                 g0_list = list(range(border1, border1 + n_samples))
-            else:
+            elif sm == "year":
                 tr, va, te, _end_excl = _year_split_g0s(
                     g["date"], int(args.seq_len), int(args.pred_len), str(args.train_end), str(args.test_start), int(args.val_weeks)
+                )
+                g0_list = {"train": tr, "val": va, "test": te}.get(str(args.scope), [])
+                if args.scope == "all":
+                    g0_list = list(range(0, max(0, n - int(args.seq_len) - int(args.pred_len) + 1)))
+                if not g0_list:
+                    continue
+            else:
+                tr, va, te, _end_excl = _date_split_g0s(
+                    g["date"],
+                    int(args.seq_len),
+                    int(args.pred_len),
+                    train_start=str(args.train_start),
+                    train_end=str(args.train_end),
+                    val_start=str(args.val_start),
+                    val_end=str(args.val_end),
+                    test_start=str(args.test_start),
+                    test_end=str(args.test_end),
                 )
                 g0_list = {"train": tr, "val": va, "test": te}.get(str(args.scope), [])
                 if args.scope == "all":

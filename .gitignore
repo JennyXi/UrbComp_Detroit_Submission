@@ -53,6 +53,18 @@ weekly_retrained_*/
 # Exception: curated weekly retrain outputs for submission
 !weekly_retrained_0505/
 !weekly_retrained_0505/**
+# Daily retraining runs (generated) — keep scripts/README only
+daily_retrained_0506/checkpoints/
+daily_retrained_0506/out/
+
+# Daily training generated artifacts
+daily_training_0430/checkpoints*/
+daily_training_0430/out*/
+
+# Geospatial + model weight artifacts (do not commit)
+*.gpkg
+*.pth
+*.zip
 # Exception: curated release under POI_Alignment_0429 (tracked for repo)
 !POI_Alignment_0429/weekly_retrained_0430/
 !POI_Alignment_0429/weekly_retrained_0430/**
